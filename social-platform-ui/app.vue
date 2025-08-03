@@ -4,9 +4,6 @@
       <h1>Social Platform</h1>
       <nav>
         <NuxtLink to="/">Home</NuxtLink>
-        <NuxtLink to="/test">Test Page</NuxtLink>
-        <NuxtLink to="/demo">Demo Mode</NuxtLink>
-        <NuxtLink to="/api-test">API Test</NuxtLink>
       </nav>
     </header>
     <main class="app-content">
@@ -42,9 +39,9 @@ body {
 }
 
 .app-header nav a {
+  margin-left: 2rem;
   color: white;
   text-decoration: none;
-  margin-left: 1rem;
 }
 
 .app-content {

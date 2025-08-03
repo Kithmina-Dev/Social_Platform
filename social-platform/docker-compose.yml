@@ -1,17 +1,31 @@
-version: '3.8'
-
 services:
   postgres:
-    image: postgres:15
-    container_name: social-platform-db
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password123
-      POSTGRES_DB: social_platform
+    image: postgres:latest
+    container_name: social_platform_db
+    restart: always
     ports:
-      - "5432:5432"
+      - '5432:5432'
+    environment:
+      - POSTGRES_USER=${DATABASE_USERNAME}
+      - POSTGRES_PASSWORD=${DATABASE_PASSWORD}
+      - POSTGRES_DB=${DATABASE_NAME}
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
+  typesense:
+    image: typesense/typesense:26.0
+    container_name: social_platform_typesense
+    restart: always
+    ports:
+      - '8108:8108'
+    environment:
+      - TYPESENSE_DATA_DIR=/data
+      - TYPESENSE_API_KEY=${TYPESENSE_API_KEY}
+      - TYPESENSE_ENABLE_CORS=true
+    volumes:
+      - typesense_data:/data
+    command: '--data-dir /data --api-key=${TYPESENSE_API_KEY} --listen-port 8108 --enable-cors'
+
 volumes:
   postgres_data:
+  typesense_data:
