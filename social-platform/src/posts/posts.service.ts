@@ -1,6 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
-import { TypesenseService } from '../typesense/typesense.service';
+import { PrismaService, TypesenseService } from '../common/services';
 import { CreatePostDto } from './dto/create-post.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
 
@@ -22,7 +21,7 @@ export class PostsService {
       title: post.title,
       content: post.content,
       authorId: 1, // Default author ID for now
-      createdAt: Math.floor(post.createdAt.getTime() / 1000), // Convert to Unix timestamp
+      createdAt: Math.floor(post.createdAt.getTime() / 1000),
       updatedAt: Math.floor(post.updatedAt.getTime() / 1000),
     });
 

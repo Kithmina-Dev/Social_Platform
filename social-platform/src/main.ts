@@ -1,11 +1,13 @@
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { Logger, ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
-import { ResponseInterceptor } from './common/interceptors/response.interceptor';
+import { setupSwagger } from './common/config';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const logger = new Logger('Bootstrap');
+  const app = await NestFactory.create(AppModule, {
+    logger: ['error', 'warn', 'log', 'debug', 'verbose'],
+  });
   
   // Global validation pipe
   app.useGlobalPipes(new ValidationPipe({
@@ -14,23 +16,8 @@ async function bootstrap() {
     transform: true,
   }));
 
-  // Global response interceptor
-  app.useGlobalInterceptors(new ResponseInterceptor());
-  
-  // Swagger Configuration
-  const config = new DocumentBuilder()
-    .setTitle('Social Platform API')
-    .addTag('posts', 'Post management endpoints')
-    .addTag('users', 'User management endpoints')
-    .addBearerAuth()
-    .build();
-  
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api/docs', app, document, {
-    customSiteTitle: 'Social Platform API Documentation',
-    customfavIcon: '/favicon.ico',
-    customCssUrl: '',
-  });
+  //Setup Swagger
+  setupSwagger(app);
   
   // Enable CORS for frontend communication
   app.enableCors({
@@ -42,7 +29,8 @@ async function bootstrap() {
   
   await app.listen(process.env.PORT ?? 8000);
   
-  console.log(`Application is running on: http://localhost:${process.env.PORT ?? 8000}`);
-  console.log(`Swagger UI is available at: http://localhost:${process.env.PORT ?? 8000}/api/docs`);
+  const port = process.env.PORT ?? 8000;
+  logger.log(`Application is running on: http://localhost:${port}`);
+  logger.log(`Swagger UI is available at: http://localhost:${port}/api/docs`);
 }
 bootstrap();
