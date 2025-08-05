@@ -9,7 +9,7 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 export function setupSwagger(app: INestApplication): void {
   const config = new DocumentBuilder()
     .setTitle('Social Platform API')
-    .setVersion('1.0')
+    .setDescription('API documentation for the Social Platform')
     .addTag('posts', 'Post management endpoints')
     .addTag('users', 'User management endpoints')
     .addTag('app', 'Application endpoints')

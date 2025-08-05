@@ -3,10 +3,7 @@ import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
 import { ResponseInterceptor } from '../interceptors/response.interceptor';
 import { HttpExceptionFilter } from '../filters/http-exception.filter';
 
-/*
-This module provides global application functionality such as 
-error handling, logging, and response formatting
-*/
+// Provides global application functionality such as error handling, logging, and response formattin
 @Global()
 @Module({
   providers: [
