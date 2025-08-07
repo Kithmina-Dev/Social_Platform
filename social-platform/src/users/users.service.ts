@@ -1,4 +1,8 @@
-import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../common/services';
 import { CreateUserDto, UpdateUserDto } from './dto';
 import * as bcrypt from 'bcrypt';
@@ -17,7 +21,7 @@ type User = {
 // Define Role enum to match the one in Prisma schema
 enum Role {
   USER = 'USER',
-  ADMIN = 'ADMIN'
+  ADMIN = 'ADMIN',
 }
 
 @Injectable()
@@ -44,11 +48,18 @@ export class UsersService {
     // Hash password
     const hashedPassword = await this.hashPassword(createUserDto.password);
 
-    // Create user
+    // Create user - extract acceptTerms since it's not stored in the database
+    const { acceptTerms, ...userData } = createUserDto;
+
+    // Validate that terms were accepted
+    if (!acceptTerms) {
+      throw new ConflictException('Terms and conditions must be accepted');
+    }
+
     const user = await this.prisma.user.create({
       data: {
-        email: createUserDto.email,
-        username: createUserDto.username,
+        email: userData.email,
+        username: userData.username,
         password: hashedPassword,
         role: Role.USER,
       },
@@ -59,7 +70,9 @@ export class UsersService {
     return result;
   }
 
-  async createAdmin(createUserDto: CreateUserDto): Promise<Omit<User, 'password'>> {
+  async createAdmin(
+    createUserDto: CreateUserDto,
+  ): Promise<Omit<User, 'password'>> {
     // Check if user exists
     const existingUser = await this.prisma.user.findFirst({
       where: {
@@ -79,11 +92,18 @@ export class UsersService {
     // Hash password
     const hashedPassword = await this.hashPassword(createUserDto.password);
 
-    // Create admin user
+    // Create admin user - extract acceptTerms since it's not stored in the database
+    const { acceptTerms, ...userData } = createUserDto;
+
+    // Validate that terms were accepted
+    if (!acceptTerms) {
+      throw new ConflictException('Terms and conditions must be accepted');
+    }
+
     const user = await this.prisma.user.create({
       data: {
-        email: createUserDto.email,
-        username: createUserDto.username,
+        email: userData.email,
+        username: userData.username,
         password: hashedPassword,
         role: Role.ADMIN,
       },
@@ -133,7 +153,10 @@ export class UsersService {
     return user;
   }
 
-  async update(id: string, updateUserDto: UpdateUserDto): Promise<Omit<User, 'password'>> {
+  async update(
+    id: string,
+    updateUserDto: UpdateUserDto,
+  ): Promise<Omit<User, 'password'>> {
     // Check if user exists
     await this.findOne(id);
 

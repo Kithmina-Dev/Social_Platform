@@ -1,240 +1,231 @@
-import { defineStore } from 'pinia';
-import axios from '../plugins/axios';
+import { defineStore } from 'pinia'
+import { ref, computed } from 'vue'
+import { useRuntimeConfig } from 'nuxt/app'
+import { useAuthStore } from './auth'
 
 interface Post {
-  id: string;
-  title: string;
-  content: string;
-  likes?: number;
-  liked?: boolean;
-  [key: string]: any;
+  id: string
+  content: string
+  imageUrl?: string
+  author: {
+    id: string
+    username: string
+    avatar?: string
+  }
+  createdAt: string
+  updatedAt: string
+  likes: number
+  comments: number
+  isLiked: boolean
 }
 
-interface PaginationState {
-  page: number;
-  limit: number;
-  total: number;
-  totalPages: number;
+interface CreatePostData {
+  content: string
+  image?: File
 }
 
-export const usePostsStore = defineStore('posts', {
-  state: () => ({
-    posts: [] as Post[],
-    currentPost: null as Post | null,
-    loading: false,
-    error: null as string | null,
-    pagination: {
-      page: 1,
-      limit: 10,
-      total: 0,
-      totalPages: 0
-    } as PaginationState
-  }),
+interface UpdatePostData {
+  content: string
+  image?: File
+}
 
-  getters: {
-    getAllPosts: (state) => state.posts,
-    getCurrentPost: (state) => state.currentPost,
-    isLoading: (state) => state.loading,
-    getError: (state) => state.error,
-    getPagination: (state) => state.pagination
-  },
+export const usePostsStore = defineStore('posts', () => {
+  // State
+  const posts = ref<Post[]>([])
+  const isLoading = ref(false)
+  const isLoadingMore = ref(false)
+  const error = ref<string | null>(null)
+  const currentPage = ref(1)
+  const hasMorePosts = ref(true)
+  const pageSize = 10
 
-  actions: {
-    async fetchPosts(page = 1, limit = 10, search: string | null = null, tags: string[] | string | null = null) {
-      this.loading = true;
-      this.error = null;
+  // Getters
+  const sortedPosts = computed(() => {
+    return [...posts.value].sort((a, b) => 
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    )
+  })
+
+  // Actions
+  const fetchPosts = async (page = 1) => {
+    try {
+      isLoading.value = true
+      error.value = null
       
-      try {
-        // Build query parameters
-        const params: Record<string, any> = { page, limit };
-        if (search) params.search = search;
-        if (tags) params.tags = Array.isArray(tags) ? tags.join(',') : tags;
-        
-        // Call your posts API
-        const response = await axios.get('/api/posts', { params });
-        
-        this.posts = response.data.items || response.data;
-        
-        // Update pagination if available
-        if (response.data.meta) {
-          this.pagination = {
-            page: response.data.meta.currentPage,
-            limit: response.data.meta.itemsPerPage,
-            total: response.data.meta.totalItems,
-            totalPages: response.data.meta.totalPages
-          };
-        }
-        
-        return this.posts;
-      } catch (error: any) {
-        this.error = error.response?.data?.message || 'Failed to fetch posts.';
-        throw error;
-      } finally {
-        this.loading = false;
-      }
-    },
-    
-    async fetchPostById(id: string) {
-      this.loading = true;
-      this.error = null;
+      const authStore = useAuthStore()
+      const config = useRuntimeConfig()
       
-      try {
-        // Call your post detail API
-        const response = await axios.get(`/api/posts/${id}`);
-        
-        this.currentPost = response.data;
-        return this.currentPost;
-      } catch (error: any) {
-        this.error = error.response?.data?.message || 'Failed to fetch post details.';
-        throw error;
-      } finally {
-        this.loading = false;
+      const response = await $fetch<{ posts: Post[], hasMore: boolean }>('/posts', {
+        baseURL: config.public.apiBaseUrl as string,
+        headers: {
+          'Authorization': `Bearer ${authStore.token}`
+        },
+        params: {
+          page,
+          limit: pageSize
+        }
+      })
+
+      if (page === 1) {
+        posts.value = response.posts
+      } else {
+        posts.value.push(...response.posts)
       }
-    },
-    
-    async createPost(postData: any) {
-      this.loading = true;
-      this.error = null;
       
-      try {
-        // Handle FormData or JSON data
-        let config = {};
-        if (postData instanceof FormData) {
-          config = {
-            headers: {
-              'Content-Type': 'multipart/form-data'
-            }
-          };
-        }
-        
-        // Call your post creation API
-        const response = await axios.post('/api/posts', postData, config);
-        
-        // Add the new post to the posts list
-        if (Array.isArray(this.posts)) {
-          this.posts.unshift(response.data);
-        }
-        
-        return response.data;
-      } catch (error: any) {
-        this.error = error.response?.data?.message || 'Failed to create post.';
-        throw error;
-      } finally {
-        this.loading = false;
-      }
-    },
-    
-    async updatePost(id: string, postData: any) {
-      this.loading = true;
-      this.error = null;
-      
-      try {
-        // Handle FormData or JSON data
-        let config = {};
-        if (postData instanceof FormData) {
-          config = {
-            headers: {
-              'Content-Type': 'multipart/form-data'
-            }
-          };
-        }
-        
-        // Call your post update API
-        const response = await axios.put(`/api/posts/${id}`, postData, config);
-        
-        // Update the post in the posts list
-        const index = this.posts.findIndex(post => post.id === id);
-        if (index !== -1) {
-          this.posts[index] = response.data;
-        }
-        
-        // Update current post if it matches
-        if (this.currentPost && this.currentPost.id === id) {
-          this.currentPost = response.data;
-        }
-        
-        return response.data;
-      } catch (error: any) {
-        this.error = error.response?.data?.message || 'Failed to update post.';
-        throw error;
-      } finally {
-        this.loading = false;
-      }
-    },
-    
-    async deletePost(id: string) {
-      this.loading = true;
-      this.error = null;
-      
-      try {
-        // Call your post deletion API
-        await axios.delete(`/api/posts/${id}`);
-        
-        // Remove the post from the posts list
-        this.posts = this.posts.filter(post => post.id !== id);
-        
-        // Clear current post if it matches
-        if (this.currentPost && this.currentPost.id === id) {
-          this.currentPost = null;
-        }
-        
-        return true;
-      } catch (error: any) {
-        this.error = error.response?.data?.message || 'Failed to delete post.';
-        throw error;
-      } finally {
-        this.loading = false;
-      }
-    },
-    
-    async likePost(id: string) {
-      try {
-        // Call your like post API
-        const response = await axios.post(`/api/posts/${id}/like`);
-        
-        // Update the post in the posts list
-        const index = this.posts.findIndex(post => post.id === id);
-        if (index !== -1) {
-          this.posts[index].likes = response.data.likes;
-          this.posts[index].liked = true;
-        }
-        
-        // Update current post if it matches
-        if (this.currentPost && this.currentPost.id === id) {
-          this.currentPost.likes = response.data.likes;
-          this.currentPost.liked = true;
-        }
-        
-        return response.data;
-      } catch (error: any) {
-        console.error('Failed to like post:', error);
-        throw error;
-      }
-    },
-    
-    async unlikePost(id: string) {
-      try {
-        // Call your unlike post API
-        const response = await axios.post(`/api/posts/${id}/unlike`);
-        
-        // Update the post in the posts list
-        const index = this.posts.findIndex(post => post.id === id);
-        if (index !== -1) {
-          this.posts[index].likes = response.data.likes;
-          this.posts[index].liked = false;
-        }
-        
-        // Update current post if it matches
-        if (this.currentPost && this.currentPost.id === id) {
-          this.currentPost.likes = response.data.likes;
-          this.currentPost.liked = false;
-        }
-        
-        return response.data;
-      } catch (error: any) {
-        console.error('Failed to unlike post:', error);
-        throw error;
-      }
+      hasMorePosts.value = response.hasMore
+      currentPage.value = page
+    } catch (err: any) {
+      error.value = err.data?.message || 'Failed to fetch posts'
+      console.error('Error fetching posts:', err)
+    } finally {
+      isLoading.value = false
     }
   }
-});
+
+  const loadMorePosts = async () => {
+    if (isLoadingMore.value || !hasMorePosts.value) return
+    
+    try {
+      isLoadingMore.value = true
+      await fetchPosts(currentPage.value + 1)
+    } finally {
+      isLoadingMore.value = false
+    }
+  }
+
+  const createPost = async (postData: CreatePostData) => {
+    try {
+      const authStore = useAuthStore()
+      const config = useRuntimeConfig()
+      
+      const formData = new FormData()
+      formData.append('content', postData.content)
+      if (postData.image) {
+        formData.append('image', postData.image)
+      }
+
+      const newPost = await $fetch<Post>('/posts', {
+        baseURL: config.public.apiBaseUrl as string,
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${authStore.token}`
+        },
+        body: formData
+      })
+
+      // Add the new post to the beginning of the list
+      posts.value.unshift(newPost)
+      
+      return newPost
+    } catch (err: any) {
+      error.value = err.data?.message || 'Failed to create post'
+      throw err
+    }
+  }
+
+  const updatePost = async (postId: string, postData: UpdatePostData) => {
+    try {
+      const authStore = useAuthStore()
+      const config = useRuntimeConfig()
+      
+      const formData = new FormData()
+      formData.append('content', postData.content)
+      if (postData.image) {
+        formData.append('image', postData.image)
+      }
+
+      const updatedPost = await $fetch<Post>(`/posts/${postId}`, {
+        baseURL: config.public.apiBaseUrl as string,
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${authStore.token}`
+        },
+        body: formData
+      })
+
+      // Update the post in the list
+      const index = posts.value.findIndex(p => p.id === postId)
+      if (index !== -1) {
+        posts.value[index] = updatedPost
+      }
+      
+      return updatedPost
+    } catch (err: any) {
+      error.value = err.data?.message || 'Failed to update post'
+      throw err
+    }
+  }
+
+  const deletePost = async (postId: string) => {
+    try {
+      const authStore = useAuthStore()
+      const config = useRuntimeConfig()
+      
+      await $fetch(`/posts/${postId}`, {
+        baseURL: config.public.apiBaseUrl as string,
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${authStore.token}`
+        }
+      })
+
+      // Remove the post from the list
+      posts.value = posts.value.filter(p => p.id !== postId)
+    } catch (err: any) {
+      error.value = err.data?.message || 'Failed to delete post'
+      throw err
+    }
+  }
+
+  const likePost = async (postId: string) => {
+    try {
+      const authStore = useAuthStore()
+      const config = useRuntimeConfig()
+      
+      await $fetch(`/posts/${postId}/like`, {
+        baseURL: config.public.apiBaseUrl as string,
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${authStore.token}`
+        }
+      })
+
+      // Update the post's like status
+      const post = posts.value.find(p => p.id === postId)
+      if (post) {
+        post.isLiked = !post.isLiked
+        post.likes += post.isLiked ? 1 : -1
+      }
+    } catch (err: any) {
+      console.error('Error liking post:', err)
+    }
+  }
+
+  const clearPosts = () => {
+    posts.value = []
+    currentPage.value = 1
+    hasMorePosts.value = true
+    error.value = null
+  }
+
+  return {
+    // State
+    posts,
+    isLoading,
+    isLoadingMore,
+    error,
+    hasMorePosts,
+    
+    // Getters
+    sortedPosts,
+    
+    // Actions
+    fetchPosts,
+    loadMorePosts,
+    createPost,
+    updatePost,
+    deletePost,
+    likePost,
+    clearPosts
+  }
+})

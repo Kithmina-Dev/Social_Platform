@@ -1,151 +1,182 @@
-import { defineStore } from 'pinia';
-import axios from '../plugins/axios';
+import { defineStore } from "pinia";
+import { ref, computed } from "vue";
+import { useRuntimeConfig, useNuxtApp } from "nuxt/app";
 
-export const useAuthStore = defineStore('auth', {
-  state: () => ({
-    user: null,
-    token: null,
-    loading: false,
-    error: null,
-  }),
+// Define API function type
+type ApiFunction = <T>(url: string, options?: any) => Promise<T>;
 
-  getters: {
-    isAuthenticated: (state) => !!state.token,
-    getUser: (state) => state.user,
-    getToken: (state) => state.token,
-    getError: (state) => state.error,
-    isLoading: (state) => state.loading,
-  },
+interface User {
+  id: string;
+  username: string;
+  email: string;
+  avatar?: string;
+}
 
-  actions: {
-    async login(email: string, password: string) {
-      this.loading = true;
-      this.error = null;
-      
-      try {
-        // Call your login API
-        const response = await axios.post('/api/auth/login', {
-          email,
-          password
-        });
-        
-        this.token = response.data.token;
-        this.user = response.data.user;
-        
-        // Store token in localStorage (browser only)
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('token', this.token);
+interface LoginCredentials {
+  username: string;
+  password: string;
+}
+
+interface RegisterCredentials {
+  username: string;
+  email: string;
+  password: string;
+  acceptTerms: boolean;
+}
+
+interface AuthResponse {
+  accessToken: string;
+  user: User;
+}
+
+export const useAuthStore = defineStore("auth", () => {
+  // State
+  const user = ref<User | null>(null);
+  const token = ref<string | null>(null);
+  const isLoading = ref(false);
+  const error = ref<string | null>(null);
+
+  // Getters
+  const isAuthenticated = computed(() => !!token.value);
+  const currentUser = computed(() => user.value);
+
+  // Actions
+  const login = async (credentials: LoginCredentials) => {
+    try {
+      const { $api } = useNuxtApp();
+      const response = await ($api as ApiFunction)<AuthResponse>(
+        "/auth/login",
+        {
+          method: "POST",
+          body: credentials,
         }
-        
-        // Set axios default header
-        axios.defaults.headers.common['Authorization'] = `Bearer ${this.token}`;
-        
-        return response.data;
-      } catch (error: any) {
-        this.error = error.response?.data?.message || 'Login failed. Please check your credentials.';
-        throw error;
-      } finally {
-        this.loading = false;
-      }
-    },
-    
-    async register(username: string, email: string, password: string) {
-      this.loading = true;
-      this.error = null;
-      
-      try {
-        // Call your register API
-        const response = await axios.post('/api/auth/register', {
-          username,
-          email,
-          password
-        });
-        
-        return response.data;
-      } catch (error: any) {
-        this.error = error.response?.data?.message || 'Registration failed. Please try again.';
-        throw error;
-      } finally {
-        this.loading = false;
-      }
-    },
-    
-    async fetchCurrentUser() {
-      this.loading = true;
-      
-      try {
-        // Call your current user API
-        const response = await axios.get('/api/auth/me');
-        
-        this.user = response.data;
-        return this.user;
-      } catch (error: any) {
-        // If API call fails, clear auth state
-        this.token = null;
-        this.user = null;
-        if (typeof window !== 'undefined') {
-          localStorage.removeItem('token');
-        }
-        delete axios.defaults.headers.common['Authorization'];
-        
-        this.error = error.response?.data?.message || 'Session expired. Please login again.';
-        throw error;
-      } finally {
-        this.loading = false;
-      }
-    },
-    
-    async logout() {
-      this.loading = true;
-      
-      try {
-        // Call your logout API (if needed)
-        await axios.post('/api/auth/logout');
-      } catch (error) {
-        console.error('Logout error:', error);
-      } finally {
-        // Clear auth state regardless of API success
-        this.token = null;
-        this.user = null;
-        this.error = null;
-        
-        // Clear localStorage (browser only)
-        if (typeof window !== 'undefined') {
-          localStorage.removeItem('token');
-        }
-        
-        // Remove axios header
-        delete axios.defaults.headers.common['Authorization'];
-        
-        this.loading = false;
-      }
-    },
-    
-    updateUserProfile(userData) {
-      // Update local user data
-      if (this.user) {
-        this.user = {
-          ...this.user,
-          ...userData
-        };
-      }
-    },
-    
-    initFromStorage() {
-      // Try to initialize state from localStorage (on app start, browser only)
-      if (typeof window !== 'undefined') {
-        const token = localStorage.getItem('token');
-        
-        if (token) {
-          this.token = token;
-          axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-          
-          // Fetch current user data
-          this.fetchCurrentUser().catch(() => {
-            // If fetching user fails, the fetchCurrentUser method will clear the auth state
-          });
-        }
-      }
+      );
+
+      // Check if the response is a NestJS standard response with a data property
+      const responseData =
+        "data" in response ? (response as any).data : response;
+      token.value = responseData.accessToken;
+      user.value = responseData.user;
+
+      // Store token in localStorage
+      localStorage.setItem("auth_token", responseData.accessToken);
+
+      return response;
+    } catch (err: any) {
+      error.value = err.data?.message || "Login failed";
+      throw err;
+    } finally {
+      isLoading.value = false;
     }
-  }
+  };
+
+  const register = async (credentials: RegisterCredentials) => {
+    try {
+      isLoading.value = true;
+      error.value = null;
+
+      console.log("Starting registration request with credentials:", {
+        ...credentials,
+      });
+      const { $api } = useNuxtApp();
+      console.log("Using API endpoint:", "/auth/register");
+
+      // Use the api plugin instead of direct fetch
+      const response = await ($api as ApiFunction)<AuthResponse>(
+        "/auth/register",
+        {
+          method: "POST",
+          body: credentials,
+          onRequest({ request, options }) {
+            console.log("Request options:", {
+              ...options,
+              body: {
+                ...(options.body as any),
+                password: options.body ? "***" : undefined,
+              },
+            });
+          },
+          onRequestError({ request, options, error }) {
+            console.error("Request error:", error);
+          },
+          onResponse({ request, response, options }) {
+            console.log("Response status:", response.status);
+            console.log("Response body:", response._data);
+          },
+          onResponseError({ request, response, options, error }) {
+            console.error("Response error:", error);
+            console.error("Response status:", response?.status);
+            console.error("Response body:", response?._data);
+          },
+        }
+      );
+
+      console.log("Registration successful:", response);
+      // Check if the response is a NestJS standard response with a data property
+      const responseData =
+        "data" in response ? (response as any).data : response;
+      token.value = responseData.accessToken;
+      user.value = responseData.user;
+
+      // Store token in localStorage
+      localStorage.setItem("auth_token", responseData.accessToken);
+
+      return response;
+    } catch (err: any) {
+      console.error("Registration failed in auth store:", err);
+      error.value = err.data?.message || "Registration failed";
+      throw err;
+    } finally {
+      isLoading.value = false;
+    }
+  };
+
+  const logout = () => {
+    user.value = null;
+    token.value = null;
+    error.value = null;
+
+    // Remove token from localStorage
+    localStorage.removeItem("auth_token");
+  };
+
+  const initializeAuth = () => {
+    // Check for stored token on app initialization
+    const storedToken = localStorage.getItem("auth_token");
+    if (storedToken) {
+      token.value = storedToken;
+      // Optionally validate token with backend
+      // fetchUserProfile()
+    }
+  };
+
+  const fetchUserProfile = async () => {
+    try {
+      const { $api } = useNuxtApp();
+      const response = await ($api as ApiFunction)<User>("/auth/profile", {
+        headers: {
+          Authorization: `Bearer ${token.value}`,
+        },
+      });
+
+      user.value = response;
+    } catch (err: any) {
+      // If token is invalid, clear auth state
+      logout();
+    }
+  };
+  // Initialize auth state on store creation
+  initializeAuth();
+  return {
+    user,
+    token,
+    isLoading,
+    error,
+    isAuthenticated,
+    currentUser,
+    login,
+    register,
+    logout,
+    fetchUserProfile,
+  };
 });
