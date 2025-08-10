@@ -3,102 +3,39 @@
     <h1 class="text-2xl font-bold mb-6">Edit Profile</h1>
 
     <div class="bg-white rounded-lg shadow p-6">
+      <!-- Error message display -->
+      <div
+        v-if="errorMessage"
+        class="bg-red-50 border border-red-200 text-red-700 p-4 rounded-lg mb-6"
+      >
+        {{ errorMessage }}
+      </div>
+
       <form @submit.prevent="updateProfile" class="space-y-6">
-        <!-- Profile Image -->
-        <div class="flex items-center space-x-6">
-          <div class="relative w-24 h-24">
-            <img
-              :src="profileImage || '/default-avatar.png'"
-              class="w-24 h-24 rounded-full object-cover border-2 border-gray-200"
-              alt="Profile image"
-            />
-            <button
-              type="button"
-              class="absolute bottom-0 right-0 bg-blue-600 text-white p-1 rounded-full"
-              @click="triggerFileInput"
-            >
-              <span class="sr-only">Change image</span>
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                class="h-4 w-4"
-                viewBox="0 0 20 20"
-                fill="currentColor"
-              >
-                <path
-                  d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"
-                />
-              </svg>
-            </button>
-            <input
-              type="file"
-              ref="fileInput"
-              @change="handleImageUpload"
-              accept="image/*"
-              class="hidden"
-            />
-          </div>
-          <div>
-            <h3 class="font-medium">Profile Photo</h3>
-            <p class="text-sm text-gray-500">PNG, JPG or GIF up to 5MB</p>
-          </div>
-        </div>
+        <!-- Profile Image Component -->
+        <ProfileImageUpload
+          v-model="profileImage"
+          @file-selected="handleFileSelected"
+        />
 
-        <!-- Basic Information -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-2"
-              >Username</label
-            >
-            <BaseInput v-model="profile.username" placeholder="Your username" />
-          </div>
+        <!-- Basic Information Component -->
+        <ProfileBasicInfo
+          :username="profile.username"
+          :displayName="profile.displayName"
+          @update:username="profile.username = $event"
+          @update:displayName="profile.displayName = $event"
+        />
 
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-2"
-              >Display Name</label
-            >
-            <BaseInput
-              v-model="profile.displayName"
-              placeholder="Your display name"
-            />
-          </div>
-        </div>
+        <!-- Bio Component -->
+        <ProfileBioSection v-model="profile.bio" />
 
-        <!-- Bio -->
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-2"
-            >Bio</label
-          >
-          <textarea
-            v-model="profile.bio"
-            rows="4"
-            class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="Tell us about yourself..."
-          ></textarea>
-        </div>
-
-        <!-- Contact Information -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-2"
-              >Email</label
-            >
-            <BaseInput
-              v-model="profile.email"
-              type="email"
-              placeholder="Your email"
-            />
-          </div>
-
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-2"
-              >Website</label
-            >
-            <BaseInput
-              v-model="profile.website"
-              placeholder="https://yourwebsite.com"
-            />
-          </div>
-        </div>
+        <!-- Contact Information Component -->
+        <ProfileContactInfo
+          :email="profile.email"
+          :website="profile.website"
+          @update:email="profile.email = $event"
+          @update:website="profile.website = $event"
+        />
 
         <!-- Buttons -->
         <div class="flex justify-end space-x-4">
@@ -115,17 +52,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from "vue";
-import { useRouter } from "vue-router";
-import { useAuthStore } from "~/stores/auth";
-import BaseInput from "~/components/base/BaseInput.vue";
-import BaseButton from "~/components/base/BaseButton.vue";
-
 const router = useRouter();
 const authStore = useAuthStore();
-const fileInput = ref<HTMLInputElement | null>(null);
+const profileStore = useProfileStore();
 const profileImage = ref<string | null>(null);
 const isLoading = ref(false);
+const errorMessage = ref<string | null>(null);
+const avatarFile = ref<File | null>(null);
 
 // Set page meta
 definePageMeta({
@@ -141,50 +74,66 @@ const profile = reactive({
   website: "",
 });
 
-onMounted(() => {
-  // Load user profile data
-  if (authStore.currentUser) {
-    profile.username = authStore.currentUser.username;
-    profile.email = authStore.currentUser.email;
-    // Add other fields when your user object has them
+onMounted(async () => {
+  try {
+    // Load user profile data
+    if (authStore.currentUser) {
+      profile.username = authStore.currentUser.username;
+      profile.email = authStore.currentUser.email;
+      profile.displayName = authStore.currentUser.displayName || "";
+      profile.bio = authStore.currentUser.bio || "";
+      profile.website = authStore.currentUser.website || "";
+
+      // Set initial profile image if available
+      if (authStore.currentUser.avatar) {
+        profileImage.value = authStore.currentUser.avatar;
+      }
+    }
+  } catch (error) {
+    console.error("Error loading profile data:", error);
+    errorMessage.value = "Failed to load profile data. Please try again.";
   }
 });
 
-function triggerFileInput() {
-  fileInput.value?.click();
-}
-
-function handleImageUpload(event: Event) {
-  const target = event.target as HTMLInputElement;
-  if (target.files && target.files[0]) {
-    const file = target.files[0];
-    const reader = new FileReader();
-
-    reader.onload = (e) => {
-      profileImage.value = e.target?.result as string;
-    };
-
-    reader.readAsDataURL(file);
-  }
+// Handle file selection from ProfileImageUpload component
+function handleFileSelected(file: File) {
+  avatarFile.value = file;
 }
 
 async function updateProfile() {
   try {
     isLoading.value = true;
+    errorMessage.value = null;
 
-    // Simulate API call delay
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    // Validate required fields
+    if (!profile.username) {
+      errorMessage.value = "Username is required";
+      return;
+    }
 
-    // TODO: Implement actual API call to update profile
+    if (!profile.email) {
+      errorMessage.value = "Email is required";
+      return;
+    }
 
-    // Show success message
+    // Prepare profile data including avatar if changed
+    const profileData = {
+      ...profile,
+      avatar: avatarFile.value || undefined,
+    };
+
+    // Call the store method to update the profile
+    await profileStore.updateProfile(profileData);
+
+    // Show success notification (could use a toast component)
     alert("Profile updated successfully");
 
     // Redirect back to profile
-    router.push("/profile");
-  } catch (error) {
+    router.push(`/profile/${profile.username}`);
+  } catch (error: any) {
     console.error("Error updating profile:", error);
-    alert("Failed to update profile");
+    errorMessage.value =
+      error?.data?.message || "Failed to update profile. Please try again.";
   } finally {
     isLoading.value = false;
   }

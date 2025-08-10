@@ -9,24 +9,40 @@
       <span v-if="required" class="text-red-500">*</span>
     </label>
 
-    <VeeField
-      :name="fieldName"
-      v-slot="{ field, errorMessage, meta, handleChange }"
-    >
-      <component
-        :is="inputComponent"
-        :modelValue="field.value"
-        @update:modelValue="(newValue: any) => field.onChange(newValue)"
-        @blur="field.onBlur"
-        :placeholder="placeholder"
-        :disabled="disabled"
-        :required="required"
-        :error="errorMessage || error"
-        :helper-text="helperText"
-        :type="type"
-        :rows="rows"
-        :class="inputClasses"
-      />
+    <VeeField :name="fieldName" v-slot="{ field, errorMessage, meta }">
+      <template v-if="component === 'textarea'">
+        <textarea
+          v-bind="field"
+          :id="fieldName"
+          :placeholder="placeholder"
+          :disabled="disabled"
+          :required="required"
+          :rows="rows"
+          class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 resize-none"
+          :class="{ 'border-red-500': errorMessage || error }"
+        ></textarea>
+      </template>
+      <template v-else>
+        <input
+          v-bind="field"
+          :id="fieldName"
+          :type="type"
+          :placeholder="placeholder"
+          :disabled="disabled"
+          :required="required"
+          class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+          :class="{ 'border-red-500': errorMessage || error }"
+        />
+      </template>
+      <p v-if="errorMessage || error" class="mt-1 text-sm text-red-600">
+        {{ errorMessage || error }}
+      </p>
+      <p
+        v-if="helperText && !errorMessage && !error"
+        class="mt-1 text-sm text-gray-500"
+      >
+        {{ helperText }}
+      </p>
     </VeeField>
   </div>
 </template>
@@ -57,13 +73,4 @@ const props = withDefaults(defineProps<Props>(), {
 });
 
 const fieldName = computed(() => props.name);
-const inputComponent = computed(() => {
-  if (props.component === "textarea") return "BaseTextarea";
-  if (props.type === "checkbox") return "BaseCheckbox";
-  return "BaseInput";
-});
-
-const inputClasses = computed(() => {
-  return props.component === "textarea" ? "resize-none" : "";
-});
 </script>

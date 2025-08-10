@@ -1,8 +1,6 @@
 import { Controller, Post, Get, Delete, Param, UseInterceptors, UploadedFile, UseGuards, BadRequestException, Req } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
 import { FilesService } from './files.service';
 import { ApiTags, ApiOperation, ApiResponse, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { diskStorage } from 'multer';
@@ -10,6 +8,7 @@ import { extname } from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { join } from 'path';
 import { ConfigService } from '@nestjs/config';
+
 
 @ApiTags('files')
 @Controller('files')

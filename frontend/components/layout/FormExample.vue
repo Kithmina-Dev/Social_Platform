@@ -62,7 +62,7 @@ const validationSchema = z.object({
 const schema = toTypedSchema(validationSchema);
 
 // Form submit handler
-function onSubmit(values) {
+function onSubmit(values: any) {
   // Process form submission here
   console.log("Form submitted with values:", values);
 }

@@ -14,24 +14,34 @@ export class TypesenseService {
     this.client = new TypesenseClient({
       nodes: this.typesenseConfiguration.nodes,
       apiKey: this.typesenseConfiguration.apiKey,
-      connectionTimeoutSeconds: this.typesenseConfiguration.connectionTimeoutSeconds,
+      connectionTimeoutSeconds:
+        this.typesenseConfiguration.connectionTimeoutSeconds,
     });
-    
+
     // Initialize collections on startup
     this.initializeCollections();
   }
 
   private async initializeCollections() {
     try {
-      // Check if posts collection exists, create if not
       const postsCollection = this.typesenseConfiguration.collections.posts;
-      
+
       try {
-        await this.client.collections(postsCollection.name).retrieve();
-      } catch (error) {
-        // Collection doesn't exist, create it
+        try {
+          await this.client.collections(postsCollection.name).delete();
+          console.log('Deleted existing posts collection');
+        } catch (err) {
+          console.log(
+            'No existing collection to delete or error deleting:',
+            err.message,
+          );
+        }
+
+        // Collection with updated schema
         await this.client.collections().create(postsCollection);
         console.log('Posts collection created successfully');
+      } catch (error) {
+        console.error('Error recreating posts collection:', error);
       }
     } catch (error) {
       console.error('Error initializing Typesense collections:', error);

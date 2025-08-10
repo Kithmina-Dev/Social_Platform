@@ -1,12 +1,29 @@
 import { NestFactory } from '@nestjs/core';
 import { Logger, ValidationPipe } from '@nestjs/common';
-import { AppModule } from './app.module';
 import { setupSwagger } from './common/config';
+import { AppModule } from './app.module';
+import { NestExpressApplication } from '@nestjs/platform-express';
+import { join } from 'path';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
-  const app = await NestFactory.create(AppModule, {
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     logger: ['error', 'warn', 'log', 'debug', 'verbose'],
+  });
+
+  // CORS for frontend communication
+  app.enableCors({
+    origin: [
+      'http://localhost:3000',
+      'http://localhost:8080',
+      'http://localhost:5173',
+      'http://localhost:4000',
+    ],
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+    credentials: true,
+    allowedHeaders: 'Content-Type,Accept,Authorization,X-Requested-With',
+    preflightContinue: false,
+    optionsSuccessStatus: 204,
   });
 
   // Global validation pipe
@@ -18,35 +35,24 @@ async function bootstrap() {
     }),
   );
 
-  //Setup Swagger
   setupSwagger(app);
 
-  // Enable CORS for frontend communication
-  app.enableCors({
-    origin: [
-      'http://localhost:3000',
-      'http://localhost:8000',
-      'http://localhost:3001',
-      'http://localhost:5173',
-      'http://localhost:4000',
-      'http://127.0.0.1:3000',
-      'http://127.0.0.1:8000',
-      'http://127.0.0.1:3001',
-      'http://127.0.0.1:5173',
-    ],
-    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
-    credentials: false,
-    allowedHeaders: 'Content-Type,Accept,Authorization',
+  // Set global prefix first
+  app.setGlobalPrefix('api');
+
+  // Serve static files from uploads directory - outside the API prefix
+  const uploadsPath = join(process.cwd(), 'uploads');
+  app.useStaticAssets(uploadsPath, {
+    prefix: '/uploads/',
   });
 
-  // Set global prefix
-  app.setGlobalPrefix('api');
+  // Global prefix is set above
 
   const port = 3000;
   await app.listen(port);
 
   console.log(`Application is running on: http://localhost:${port}`);
   console.log(`Swagger UI is available at: http://localhost:${port}/api/docs`);
-  console.log(`If using Nuxt frontend, access it at: http://localhost:8000`);
+  console.log(`If using Nuxt frontend, access it at: http://localhost:8080`);
 }
 bootstrap();

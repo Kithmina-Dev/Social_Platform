@@ -5,14 +5,20 @@ export default defineNuxtConfig({
   modules: ["@nuxtjs/tailwindcss", "@pinia/nuxt", "@vee-validate/nuxt"],
   runtimeConfig: {
     public: {
-      apiBaseUrl: process.env.API_BASE_URL || "http://localhost:8000/api",
+      apiBaseUrl: process.env.API_BASE_URL || "http://localhost:3000",
     },
   },
   devServer: {
-    port: 8000,
+    port: 8080,
   },
-  alias: {
-    "@stores": "~/stores",
+  css: [
+    "primevue/resources/themes/lara-light-blue/theme.css",
+    "primevue/resources/primevue.css",
+    "primeicons/primeicons.css",
+    "~/assets/css/main.css",
+  ],
+  build: {
+    transpile: ["primevue"],
   },
   components: {
     dirs: [
@@ -20,6 +26,9 @@ export default defineNuxtConfig({
       "~/components/base",
       "~/components/forms",
       "~/components/auth",
+      "~/components/posts",
+      "~/components/layout",
+      "~/components/profile",
     ],
   },
 });

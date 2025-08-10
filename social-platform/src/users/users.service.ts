@@ -14,11 +14,11 @@ type User = {
   username: string;
   password: string;
   role: 'USER' | 'ADMIN';
+  avatar?: string | null;
   createdAt: Date;
   updatedAt: Date;
 };
 
-// Define Role enum to match the one in Prisma schema
 enum Role {
   USER = 'USER',
   ADMIN = 'ADMIN',
@@ -48,10 +48,9 @@ export class UsersService {
     // Hash password
     const hashedPassword = await this.hashPassword(createUserDto.password);
 
-    // Create user - extract acceptTerms since it's not stored in the database
+    // Create user
     const { acceptTerms, ...userData } = createUserDto;
 
-    // Validate that terms were accepted
     if (!acceptTerms) {
       throw new ConflictException('Terms and conditions must be accepted');
     }
@@ -65,7 +64,6 @@ export class UsersService {
       },
     });
 
-    // Remove password from returned object
     const { password, ...result } = user;
     return result;
   }
@@ -92,7 +90,7 @@ export class UsersService {
     // Hash password
     const hashedPassword = await this.hashPassword(createUserDto.password);
 
-    // Create admin user - extract acceptTerms since it's not stored in the database
+    // Create admin user
     const { acceptTerms, ...userData } = createUserDto;
 
     // Validate that terms were accepted
@@ -152,6 +150,13 @@ export class UsersService {
 
     return user;
   }
+  
+  async findByUsernameWithoutError(username: string): Promise<User | null> {
+    const user = await this.prisma.user.findUnique({
+      where: { username },
+    });
+    return user;
+  }
 
   async update(
     id: string,
@@ -194,5 +199,25 @@ export class UsersService {
   private async hashPassword(password: string): Promise<string> {
     const saltRounds = 10;
     return bcrypt.hash(password, saltRounds);
+  }
+
+  async countFollowers(userId: string): Promise<number> {
+    // For now, return a mock count since we haven't implemented the follows functionality yet
+    return 0;
+  }
+
+  async countFollowing(userId: string): Promise<number> {
+    // For now, return a mock count since we haven't implemented the follows functionality yet
+    return 0;
+  }
+
+  async countUserPosts(userId: string): Promise<number> {
+    // Count posts by this user
+    const count = await this.prisma.post.count({
+      where: {
+        authorId: userId,
+      },
+    });
+    return count;
   }
 }

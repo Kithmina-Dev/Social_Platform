@@ -31,6 +31,9 @@ import { CreatePostWithFileDto } from './dto/create-post-with-file.dto';
 import { UpdatePostWithFileDto } from './dto/update-post-with-file.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
+import { extname, join } from 'path';
+import { v4 as uuidv4 } from 'uuid';
 
 @ApiTags('posts')
 @Controller('posts')
@@ -39,24 +42,37 @@ export class PostsController {
 
   @Post()
   @UseGuards(JwtAuthGuard)
-  @UseInterceptors(FileInterceptor('file', {
-    limits: {
-      fileSize: 5 * 1024 * 1024,
-    },
-    fileFilter: (req, file, callback) => {
-      if (!file.originalname.match(/\.(jpg|jpeg|png|gif|webp)$/)) {
-        return callback(new Error('Only image files are allowed!'), false);
-      }
-      callback(null, true);
-    }
-  }))
-  @ApiOperation({ 
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: diskStorage({
+        destination: (req, file, cb) => {
+          const uploadDir = join(process.cwd(), 'uploads');
+          cb(null, uploadDir);
+        },
+        filename: (req, file, cb) => {
+          const uniqueFilename = `${uuidv4()}${extname(file.originalname)}`;
+          cb(null, uniqueFilename);
+        },
+      }),
+      limits: {
+        fileSize: 5 * 1024 * 1024,
+      },
+      fileFilter: (req, file, callback) => {
+        if (!file.originalname.match(/\.(jpg|jpeg|png|gif|webp)$/)) {
+          return callback(new Error('Only image files are allowed!'), false);
+        }
+        callback(null, true);
+      },
+    }),
+  )
+  @ApiOperation({
     summary: 'Create a new post',
-    description: 'Creates a new blog post with title and content. The post will be automatically indexed for search. Optionally upload a file with the post.'
+    description:
+      'Creates a new blog post with title and content. The post will be automatically indexed for search. Optionally upload a file with the post.',
   })
   @ApiBody({ type: CreatePostWithFileDto })
-  @ApiResponse({ 
-    status: HttpStatus.CREATED, 
+  @ApiResponse({
+    status: HttpStatus.CREATED,
     description: 'Post created successfully',
     schema: {
       example: {
@@ -77,30 +93,34 @@ export class PostsController {
             email: 'john@example.com',
             createdAt: '2025-08-03T16:45:12.685Z',
           },
-          files: []
+          files: [],
         },
-        timestamp: '2025-08-03 17:45:12'
-      }
-    }
+        timestamp: '2025-08-03 17:45:12',
+      },
+    },
   })
-  @ApiResponse({ status: HttpStatus.BAD_REQUEST, description: 'Invalid input data' })
+  @ApiResponse({
+    status: HttpStatus.BAD_REQUEST,
+    description: 'Invalid input data',
+  })
   @ApiResponse({ status: HttpStatus.UNAUTHORIZED, description: 'Unauthorized' })
   @UsePipes(new ValidationPipe())
   create(
     @Body() createPostDto: CreatePostDto,
     @UploadedFile() file: Express.Multer.File,
-    @Req() req
+    @Req() req,
   ) {
     return this.postsService.create(createPostDto, req.user.id, file);
   }
 
   @Get()
-  @ApiOperation({ 
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({
     summary: 'Get all posts',
-    description: 'Retrieves all posts ordered by creation date (newest first)'
+    description: 'Retrieves all posts ordered by creation date (newest first)',
   })
-  @ApiResponse({ 
-    status: HttpStatus.OK, 
+  @ApiResponse({
+    status: HttpStatus.OK,
     description: 'Posts retrieved successfully',
     schema: {
       example: {
@@ -114,30 +134,105 @@ export class PostsController {
             title: 'My First Post',
             content: 'This is the content of my first post.',
             createdAt: '2025-08-03T17:45:12.685Z',
-            updatedAt: '2025-08-03T17:45:12.685Z'
-          }
+            updatedAt: '2025-08-03T17:45:12.685Z',
+            likes: 5,
+            isLiked: true,
+          },
         ],
-        timestamp: '2025-08-03 17:45:12'
-      }
-    }
+        timestamp: '2025-08-03 17:45:12',
+      },
+    },
   })
-  findAll() {
-    return this.postsService.findAll();
+  async findAll(@Req() req) {
+    const posts = await this.postsService.findAll(req.user?.id);
+
+    // Check if each post is liked by the current user
+    if (req.user && req.user.id) {
+      const postsWithLikeStatus = await Promise.all(
+        posts.map(async (post) => {
+          const isLiked = await this.postsService.isLikedByUser(
+            post.id,
+            req.user.id,
+          );
+          return { ...post, isLiked };
+        }),
+      );
+      return postsWithLikeStatus;
+    }
+
+    return posts;
+  }
+
+  @Get('user/:username')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({
+    summary: 'Get posts by username',
+    description: 'Retrieves all posts by a specific user',
+  })
+  @ApiParam({
+    name: 'username',
+    description: 'Username',
+    example: 'johndoe',
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'User posts retrieved successfully',
+    schema: {
+      example: {
+        status: true,
+        path: '/posts/user/johndoe',
+        message: 'success',
+        statusCode: 200,
+        data: [
+          {
+            id: 'cmdvz20of0000i89c32z3x1md',
+            title: 'My First Post',
+            content: 'This is the content of my first post.',
+            authorId: 'clz1w3j4k0001i8jhhst1x0zx',
+            createdAt: '2025-08-03T17:45:12.685Z',
+            updatedAt: '2025-08-03T17:45:12.685Z',
+            likes: 5,
+            isLiked: false,
+          },
+        ],
+        timestamp: '2025-08-03 17:45:12',
+      },
+    },
+  })
+  @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'User not found' })
+  async getPostsByUsername(@Param('username') username: string, @Req() req) {
+    const posts = await this.postsService.getPostsByUsername(username);
+
+    // Check if each post is liked by the current user
+    if (req.user && req.user.id) {
+      const postsWithLikeStatus = await Promise.all(
+        posts.map(async (post) => {
+          const isLiked = await this.postsService.isLikedByUser(
+            post.id,
+            req.user.id,
+          );
+          return { ...post, isLiked };
+        }),
+      );
+      return postsWithLikeStatus;
+    }
+
+    return posts;
   }
 
   @Get('search')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Search posts',
-    description: 'Search posts using Typesense full-text search. Searches in title and content fields.'
+    description: 'Searches your content in title and content fields.',
   })
-  @ApiQuery({ 
-    name: 'q', 
+  @ApiQuery({
+    name: 'q',
     description: 'Search query string',
     example: 'javascript tutorial',
-    required: true 
+    required: true,
   })
-  @ApiResponse({ 
-    status: HttpStatus.OK, 
+  @ApiResponse({
+    status: HttpStatus.OK,
     description: 'Search results retrieved successfully',
     schema: {
       example: {
@@ -152,29 +247,30 @@ export class PostsController {
             content: 'Learn JavaScript fundamentals...',
             authorId: 1,
             createdAt: 1754243112,
-            updatedAt: 1754243112
-          }
+            updatedAt: 1754243112,
+          },
         ],
-        timestamp: '2025-08-03 17:45:12'
-      }
-    }
+        timestamp: '2025-08-03 17:45:12',
+      },
+    },
   })
   search(@Query('q') query: string) {
     return this.postsService.search(query);
   }
 
   @Get(':id')
-  @ApiOperation({ 
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({
     summary: 'Get post by ID',
-    description: 'Retrieves a specific post by its unique identifier'
+    description: 'Retrieves a specific post by its unique identifier',
   })
-  @ApiParam({ 
-    name: 'id', 
+  @ApiParam({
+    name: 'id',
     description: 'Post ID',
-    example: 'cmdvz20of0000i89c32z3x1md'
+    example: 'cmdvz20of0000i89c32z3x1md',
   })
-  @ApiResponse({ 
-    status: HttpStatus.OK, 
+  @ApiResponse({
+    status: HttpStatus.OK,
     description: 'Post retrieved successfully',
     schema: {
       example: {
@@ -187,37 +283,59 @@ export class PostsController {
           title: 'My First Post',
           content: 'This is the content of my first post.',
           createdAt: '2025-08-03T17:45:12.685Z',
-          updatedAt: '2025-08-03T17:45:12.685Z'
+          updatedAt: '2025-08-03T17:45:12.685Z',
+          likes: 5,
+          isLiked: true,
         },
-        timestamp: '2025-08-03 17:45:12'
-      }
-    }
+        timestamp: '2025-08-03 17:45:12',
+      },
+    },
   })
   @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Post not found' })
-  findOne(@Param('id') id: string) {
-    return this.postsService.findOne(id);
+  async findOne(@Param('id') id: string, @Req() req) {
+    const post = await this.postsService.findOne(id);
+
+    // Check if post is liked by current user
+    if (req.user && req.user.id) {
+      const isLiked = await this.postsService.isLikedByUser(id, req.user.id);
+      return { ...post, isLiked };
+    }
+
+    return post;
   }
 
   @Post('upload')
   @UseGuards(JwtAuthGuard)
-  @UseInterceptors(FileInterceptor('file', {
-    limits: {
-      fileSize: 5 * 1024 * 1024,
-    },
-    fileFilter: (req, file, callback) => {
-      if (!file.originalname.match(/\.(jpg|jpeg|png|gif|webp)$/)) {
-        return callback(new Error('Only image files are allowed!'), false);
-      }
-      callback(null, true);
-    }
-  }))
-  @ApiOperation({ 
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: diskStorage({
+        destination: (req, file, cb) => {
+          const uploadDir = join(process.cwd(), 'uploads');
+          cb(null, uploadDir);
+        },
+        filename: (req, file, cb) => {
+          const uniqueFilename = `${uuidv4()}${extname(file.originalname)}`;
+          cb(null, uniqueFilename);
+        },
+      }),
+      limits: {
+        fileSize: 5 * 1024 * 1024,
+      },
+      fileFilter: (req, file, callback) => {
+        if (!file.originalname.match(/\.(jpg|jpeg|png|gif|webp)$/)) {
+          return callback(new Error('Only image files are allowed!'), false);
+        }
+        callback(null, true);
+      },
+    }),
+  )
+  @ApiOperation({
     summary: 'Upload an image',
-    description: 'Uploads an image and optionally attaches it to a post'
+    description: 'Uploads an image and optionally attaches it to a post',
   })
   @ApiBody({ type: UploadPostImageDto })
-  @ApiResponse({ 
-    status: HttpStatus.CREATED, 
+  @ApiResponse({
+    status: HttpStatus.CREATED,
     description: 'File uploaded successfully',
     schema: {
       example: {
@@ -235,47 +353,67 @@ export class PostsController {
           userId: 'clz1w3j4k0001i8jhhst1x0zx',
           isProfilePic: false,
           createdAt: '2025-08-03T17:45:12.685Z',
-          updatedAt: '2025-08-03T17:45:12.685Z'
+          updatedAt: '2025-08-03T17:45:12.685Z',
         },
-        timestamp: '2025-08-03 17:45:12'
-      }
-    }
+        timestamp: '2025-08-03 17:45:12',
+      },
+    },
   })
-  @ApiResponse({ status: HttpStatus.BAD_REQUEST, description: 'Invalid file or missing file' })
+  @ApiResponse({
+    status: HttpStatus.BAD_REQUEST,
+    description: 'Invalid file or missing file',
+  })
   @ApiResponse({ status: HttpStatus.UNAUTHORIZED, description: 'Unauthorized' })
   uploadImage(
     @Body() uploadDto: UploadPostImageDto,
     @UploadedFile() file: Express.Multer.File,
-    @Req() req
+    @Req() req,
   ) {
-    return this.postsService.uploadImage(uploadDto.postId || null, file, req.user.id);
+    return this.postsService.uploadImage(
+      uploadDto.postId || null,
+      file,
+      req.user.id,
+    );
   }
 
   @Patch(':id')
   @UseGuards(JwtAuthGuard)
-  @UseInterceptors(FileInterceptor('file', {
-    limits: {
-      fileSize: 5 * 1024 * 1024,
-    },
-    fileFilter: (req, file, callback) => {
-      if (!file.originalname.match(/\.(jpg|jpeg|png|gif|webp)$/)) {
-        return callback(new Error('Only image files are allowed!'), false);
-      }
-      callback(null, true);
-    }
-  }))
-  @ApiOperation({ 
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: diskStorage({
+        destination: (req, file, cb) => {
+          const uploadDir = join(process.cwd(), 'uploads');
+          cb(null, uploadDir);
+        },
+        filename: (req, file, cb) => {
+          const uniqueFilename = `${uuidv4()}${extname(file.originalname)}`;
+          cb(null, uniqueFilename);
+        },
+      }),
+      limits: {
+        fileSize: 5 * 1024 * 1024,
+      },
+      fileFilter: (req, file, callback) => {
+        if (!file.originalname.match(/\.(jpg|jpeg|png|gif|webp)$/)) {
+          return callback(new Error('Only image files are allowed!'), false);
+        }
+        callback(null, true);
+      },
+    }),
+  )
+  @ApiOperation({
     summary: 'Update post',
-    description: 'Updates an existing post. Updated post will be re-indexed for search.'
+    description:
+      'Updates an existing post. Updated post will be re-indexed for search.',
   })
-  @ApiParam({ 
-    name: 'id', 
+  @ApiParam({
+    name: 'id',
     description: 'Post ID',
-    example: 'cmdvz20of0000i89c32z3x1md'
+    example: 'cmdvz20of0000i89c32z3x1md',
   })
   @ApiBody({ type: UpdatePostWithFileDto })
-  @ApiResponse({ 
-    status: HttpStatus.OK, 
+  @ApiResponse({
+    status: HttpStatus.OK,
     description: 'Post updated successfully',
     schema: {
       example: {
@@ -296,39 +434,45 @@ export class PostsController {
             email: 'john@example.com',
             createdAt: '2025-08-03T16:45:12.685Z',
           },
-          files: []
+          files: [],
         },
-        timestamp: '2025-08-03 18:30:45'
-      }
-    }
+        timestamp: '2025-08-03 18:30:45',
+      },
+    },
   })
   @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Post not found' })
-  @ApiResponse({ status: HttpStatus.BAD_REQUEST, description: 'Invalid input data' })
+  @ApiResponse({
+    status: HttpStatus.BAD_REQUEST,
+    description: 'Invalid input data',
+  })
   @ApiResponse({ status: HttpStatus.UNAUTHORIZED, description: 'Unauthorized' })
-  @ApiResponse({ status: HttpStatus.FORBIDDEN, description: 'Forbidden - not post owner or admin' })
+  @ApiResponse({
+    status: HttpStatus.FORBIDDEN,
+    description: 'Forbidden - not post owner or admin',
+  })
   @UsePipes(new ValidationPipe())
   update(
-    @Param('id') id: string, 
+    @Param('id') id: string,
     @Body() updatePostDto: UpdatePostDto,
     @UploadedFile() file: Express.Multer.File,
-    @Req() req
+    @Req() req,
   ) {
     return this.postsService.update(id, updatePostDto, req.user.id, file);
   }
 
   @Delete(':id')
   @UseGuards(JwtAuthGuard)
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Delete post',
-    description: 'Deletes a post and removes it from the search index'
+    description: 'Deletes a post and removes it from the search index',
   })
-  @ApiParam({ 
-    name: 'id', 
+  @ApiParam({
+    name: 'id',
     description: 'Post ID',
-    example: 'cmdvz20of0000i89c32z3x1md'
+    example: 'cmdvz20of0000i89c32z3x1md',
   })
-  @ApiResponse({ 
-    status: HttpStatus.OK, 
+  @ApiResponse({
+    status: HttpStatus.OK,
     description: 'Post deleted successfully',
     schema: {
       example: {
@@ -341,16 +485,54 @@ export class PostsController {
           title: 'Deleted Post',
           content: 'This post was deleted.',
           createdAt: '2025-08-03T17:45:12.685Z',
-          updatedAt: '2025-08-03T17:45:12.685Z'
+          updatedAt: '2025-08-03T17:45:12.685Z',
         },
-        timestamp: '2025-08-03 18:35:12'
-      }
-    }
+        timestamp: '2025-08-03 18:35:12',
+      },
+    },
   })
   @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Post not found' })
   @ApiResponse({ status: HttpStatus.UNAUTHORIZED, description: 'Unauthorized' })
-  @ApiResponse({ status: HttpStatus.FORBIDDEN, description: 'Forbidden - not post owner or admin' })
+  @ApiResponse({
+    status: HttpStatus.FORBIDDEN,
+    description: 'Forbidden - not post owner or admin',
+  })
   remove(@Param('id') id: string, @Req() req) {
     return this.postsService.remove(id, req.user.id);
+  }
+
+  @Post(':id/like')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({
+    summary: 'Like or unlike a post',
+    description: 'Toggles the like status of a post for the current user',
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'Post ID',
+    example: 'cmdvz20of0000i89c32z3x1md',
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Like status toggled successfully',
+    schema: {
+      example: {
+        status: true,
+        path: '/posts/cmdvz20of0000i89c32z3x1md/like',
+        message: 'success',
+        statusCode: 200,
+        data: {
+          liked: true,
+          likeCount: 5,
+          message: 'Post liked successfully',
+        },
+        timestamp: '2025-08-08 12:30:45',
+      },
+    },
+  })
+  @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Post not found' })
+  @ApiResponse({ status: HttpStatus.UNAUTHORIZED, description: 'Unauthorized' })
+  async toggleLike(@Param('id') id: string, @Req() req) {
+    return this.postsService.likePost(id, req.user.id);
   }
 }

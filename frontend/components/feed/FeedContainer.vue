@@ -3,7 +3,7 @@
     <!-- Create Post Card -->
     <div class="bg-white rounded-lg shadow-sm p-6">
       <div class="flex items-start space-x-4">
-        <Avatar
+        <BaseAvatar
           :image="currentUser?.avatar || ''"
           :label="currentUser?.username?.charAt(0)?.toUpperCase() || 'U'"
           class="w-10 h-10"
@@ -56,10 +56,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
-import PostCard from '../posts/PostCard.vue'
-import PostForm from '../posts/PostForm.vue'
-const config = useRuntimeConfig()
+import { ref, onMounted, computed } from "vue";
+import PostCard from "../posts/PostCard.vue";
+import BaseAvatar from "~/components/base/BaseAvatar.vue";
+import PostForm from "~/components/posts/PostForm.vue";
+import Dialog from "primevue/dialog";
+import { useAuthStore } from "~/stores/auth";
+const config = useRuntimeConfig();
 
 interface Post {
   id: string;
@@ -81,54 +84,54 @@ interface PostResponse {
   data: Post[];
 }
 
-const authStore = useAuthStore()
-const posts = ref<Post[]>([])
-const isLoading = ref(false)
-const hasMorePosts = ref(true)
-const showCreatePost = ref(false)
-const page = ref(1)
+const authStore = useAuthStore();
+const posts = ref<Post[]>([]);
+const isLoading = ref(false);
+const hasMorePosts = ref(true);
+const showCreatePost = ref(false);
+const page = ref(1);
 
-const currentUser = computed(() => authStore.currentUser)
+const currentUser = computed(() => authStore.currentUser);
 
 // Fetch posts from API
 const fetchPosts = async () => {
   try {
-    isLoading.value = true
-    const response = await $fetch<PostResponse>('/posts', {
+    isLoading.value = true;
+    const response = await $fetch<PostResponse>("/posts", {
       baseURL: config.public.apiBaseUrl,
-      params: { page: page.value }
-    })
-    
+      params: { page: page.value },
+    });
+
     if (page.value === 1) {
-      posts.value = response.data || []
+      posts.value = response.data || [];
     } else {
-      posts.value.push(...(response.data || []))
+      posts.value.push(...(response.data || []));
     }
-    
-    hasMorePosts.value = response.data?.length === 10
+
+    hasMorePosts.value = response.data?.length === 10;
   } catch (error) {
-    console.error('Error fetching posts:', error)
+    console.error("Error fetching posts:", error);
   } finally {
-    isLoading.value = false
+    isLoading.value = false;
   }
-}
+};
 
 const loadMorePosts = async () => {
-  page.value++
-  await fetchPosts()
-}
+  page.value++;
+  await fetchPosts();
+};
 
 const refreshPosts = async () => {
-  page.value = 1
-  await fetchPosts()
-}
+  page.value = 1;
+  await fetchPosts();
+};
 
 const handlePostCreated = () => {
-  showCreatePost.value = false
-  refreshPosts()
-}
+  showCreatePost.value = false;
+  refreshPosts();
+};
 
 onMounted(() => {
-  fetchPosts()
-})
+  fetchPosts();
+});
 </script>

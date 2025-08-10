@@ -15,9 +15,11 @@ export class AuthService {
 
   async login(loginDto: LoginDto) {
     // Find user by username
-    const user = await this.usersService.findByUsername(loginDto.username).catch(() => {
-      throw new UnauthorizedException('Invalid username or password');
-    });
+    const user = await this.usersService
+      .findByUsername(loginDto.username)
+      .catch(() => {
+        throw new UnauthorizedException('Invalid username or password');
+      });
 
     // Validate password
     const isPasswordValid = await bcrypt.compare(
@@ -29,11 +31,18 @@ export class AuthService {
       throw new UnauthorizedException('Invalid username or password');
     }
 
+    // Determine token expiration
+    const expiresIn = loginDto.rememberMe ? '30d' : '1h';
+
+    console.log(
+      `Login with rememberMe: ${loginDto.rememberMe}, setting token expiry: ${expiresIn}`,
+    );
+
     // Generate JWT token
-    const payload = { 
-      sub: user.id, 
+    const payload = {
+      sub: user.id,
       username: user.username,
-      role: user.role
+      role: user.role,
     };
 
     return {
@@ -43,7 +52,7 @@ export class AuthService {
         username: user.username,
         role: user.role,
       },
-      accessToken: this.jwtService.sign(payload),
+      accessToken: this.jwtService.sign(payload, { expiresIn }),
     };
   }
 

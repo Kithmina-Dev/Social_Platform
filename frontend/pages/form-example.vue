@@ -6,5 +6,4 @@
 </template>
 
 <script setup lang="ts">
-// The component will be auto-imported thanks to the Nuxt auto-imports feature
 </script>

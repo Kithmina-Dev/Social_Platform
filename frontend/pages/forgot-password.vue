@@ -72,7 +72,6 @@
 <script setup lang="ts">
 import { toTypedSchema } from "@vee-validate/zod";
 import * as z from "zod";
-import { ref } from "vue";
 
 definePageMeta({
   middleware: ["guest"],

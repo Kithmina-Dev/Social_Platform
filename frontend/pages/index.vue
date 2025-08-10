@@ -29,12 +29,19 @@
 </template>
 
 <script setup lang="ts">
-import { navigateTo } from "nuxt/app";
 
 // Set the layout for the landing page
 definePageMeta({
   layout: "landing",
 });
+
+// Get auth store
+const authStore = useAuthStore();
+
+// Redirect if user is already authenticated
+if (process.client && authStore.isAuthenticated) {
+  navigateTo("/explore");
+}
 
 // Navigation functions
 const navigateToLogin = () => {

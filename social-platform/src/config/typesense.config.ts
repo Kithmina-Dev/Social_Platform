@@ -17,7 +17,7 @@ export default registerAs('typesense', () => ({
         { name: 'id', type: 'int64' as const },
         { name: 'title', type: 'string' as const },
         { name: 'content', type: 'string' as const },
-        { name: 'authorId', type: 'int64' as const },
+        { name: 'authorId', type: 'string' as const },
         { name: 'createdAt', type: 'int64' as const },
         { name: 'updatedAt', type: 'int64' as const },
       ],

@@ -5,11 +5,21 @@
 </template>
 
 <script setup lang="ts">
-import LoginForm from '~/components/auth/LoginForm.vue'
+import LoginForm from "~/components/auth/LoginForm.vue";
+import { useAuthStore } from "~/stores/auth";
+import { onMounted } from "vue";
 
-// Set the layout for this page
 definePageMeta({
-  layout: 'auth',
-  middleware: 'guest'
-})
+  layout: "auth",
+  middleware: "guest",
+});
+
+onMounted(() => {
+  const authStore = useAuthStore();
+
+  if (window.location.pathname === "/login") {
+    console.log("Login page loaded directly, ensuring clean auth state");
+    authStore.logout();
+  }
+});
 </script>
